@@ -1,14 +1,16 @@
 import 
     strutils, os,
-    async, asyncnet, net, chat_client
+    threadpool,
+    net,
+    chat_client
 
 type
     Server* = object
-        socket: AsyncSocket
+        socket:Socket 
         host*:IpAddress
         port*: Port
         ctx: SslContext
-        clients: seq[AsyncSocket]
+        clients: seq[Socket]
         counter: uint32
 
 
@@ -16,18 +18,18 @@ proc initCTX(server: var Server, certFile, keyFile: string) =
     server.ctx = newContext(certFile=certFile, keyFile=keyFile)
     server.ctx.wrapSocket(server.socket)
 
-proc handleClient(server: Server, client: AsyncSocket) {.async.} =
+proc handleClient(server: Server, client: Socket) {.thread.} =
     while true:
-        var line = await client.recvLine()
+        var line = client.recvLine()
         if line.len == 0: 
             # client disconnected
             discard 
             line = "client disconnected"
         for client in server.clients:
-            await client.send(line  &  "\r\L")
+            client.send(line  &  "\r\L")
 
 
-proc startServer*(args: seq[string]) {.async.} =
+proc startServer*(args: seq[string]) {.thread.} =
     echo "[+] starting server..."
     var
         server: Server
@@ -42,10 +44,11 @@ proc startServer*(args: seq[string]) {.async.} =
 
     if not (keyFile.fileExists() or certFile.fileExists()):
         echo "[-] keyFile or certFile not found"
-        echo "generate with"
+        echo "please generate new keyFile or certFile with"
         echo "openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout " & keyFile & " -out " & certFile
+        quit()
 
-    server.socket = newAsyncSocket()
+    server.socket = newSocket()
     server.socket.setSockOpt(OptReuseAddr, true)
     server.socket.setSockOpt(OptReusePort, true)
     server.socket.bindAddr(server.port, $(server.host))
@@ -57,8 +60,11 @@ proc startServer*(args: seq[string]) {.async.} =
     echo "[+] server started... listening at": server.socket.getLocalAddr()
 
     while true:
-        var (clientAddr, client) = await server.socket.acceptAddr()
+        var 
+            clientAddr: string
+            client: Socket
+        server.socket.acceptAddr(client, clientAddr)
         echo "client connected to server from: " & $clientAddr
         server.ctx.wrapConnectedSocket(client, handshakeAsServer)
         server.clients.add(client)
-        asyncCheck server.handleClient(client)
+        spawn server.handleClient(client)

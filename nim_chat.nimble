@@ -12,3 +12,4 @@ binDir        = "bin"
 # Dependencies
 
 requires "nim >= 1.6.4"
+requires "jsony"

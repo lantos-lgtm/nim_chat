@@ -15,7 +15,12 @@ type
         counter*: uint32
 
 proc cipherMessage*(msg: var Message, key: Key): uint32 =
-    chacha20_cipher(key, msg.counter, msg.nonce, msg.message)
+    var
+        m: seq[byte] = @[]
+    m.setLen(msg.message.len())
+    copyMem(m[0].addr, msg.message[0].addr, m.len)
+    result = chacha20_cipher(key, msg.counter, msg.nonce, m)
+    copyMem(msg.message[0].addr, m[0].addr, m.len)
 
 proc passMetaMessage*(msg: string): MetaMessage =
     try:

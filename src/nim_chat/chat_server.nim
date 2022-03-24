@@ -1,5 +1,6 @@
-import strutils, os
-import async, asyncnet, net
+import 
+    strutils, os,
+    async, asyncnet, net, chat_client
 
 type
     Server* = object
@@ -7,6 +8,8 @@ type
         host*:IpAddress
         port*: Port
         ctx: SslContext
+        clients: seq[AsyncSocket]
+        counter: uint32
 
 
 proc initCTX(server: var Server, certFile, keyFile: string) =
@@ -14,7 +17,15 @@ proc initCTX(server: var Server, certFile, keyFile: string) =
     server.ctx.wrapSocket(server.socket)
 
 proc handleClient(server: Server, client: AsyncSocket) {.async.} =
-    discard
+    while true:
+        var line = await client.recvLine()
+        if line.len == 0: 
+            # client disconnected
+            discard 
+            line = "client disconnected"
+        for client in server.clients:
+            await client.send(line  &  "\r\L")
+
 
 proc startServer*(args: seq[string]) {.async.} =
     echo "[+] starting server..."
@@ -39,6 +50,8 @@ proc startServer*(args: seq[string]) {.async.} =
     server.socket.setSockOpt(OptReusePort, true)
     server.socket.bindAddr(server.port, $(server.host))
     server.socket.listen()
+    defer:
+        server.socket.close()
 
     server.initCTX(certFile, keyFile)
     echo "[+] server started... listening at": server.socket.getLocalAddr()
@@ -47,4 +60,5 @@ proc startServer*(args: seq[string]) {.async.} =
         var (clientAddr, client) = await server.socket.acceptAddr()
         echo "client connected to server from: " & $clientAddr
         server.ctx.wrapConnectedSocket(client, handshakeAsServer)
+        server.clients.add(client)
         asyncCheck server.handleClient(client)

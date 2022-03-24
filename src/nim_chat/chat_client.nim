@@ -24,21 +24,21 @@ type
 # initialize the SSL context, verify selfsigned cert and then wrap the client socket with the ssl context.
 proc initCTX(client: var Client, certFile: string) =
     client.ctx = newContext(certFile=certFile, verifyMode= CVerifyPeer)
-    discard SSL_CTX_load_verify_locations(client.ctx.context, certFile ,"")
+    discard SSL_CTX_load_verify_locations(client.ctx.context, certFile , $client.host)
     client.ctx.wrapSocket(client.socket)
 
 proc handleIncomingPacket(client: Client) =
     var line = client.socket.recvLine()
-    echo "here"
     var meta_message = line.passMetaMessage()
     counter = meta_message.message.cipherMessage(client.key)
+    echo meta_message.message.message
 
 proc sendMessage(client: Client, msg: string) =
     var meta_message: MetaMessage
     meta_message.message.message = msg 
     meta_message.message.nonce = client.nonce
-    meta_message.message.counter = meta_message.message.cipherMessage(client.key)
-    counter = meta_message.message.counter
+    meta_message.message.counter = counter
+    counter = meta_message.message.cipherMessage(client.key)
     client.socket.send(meta_message.toJson() & "\r\L")
 
 proc incomingThread(client: Client) {.thread.} =
@@ -69,8 +69,8 @@ proc startClient*(args: seq[string]) {.thread.} =
     defer:
         client.socket.close()
 
-    client.socket.connect(address = $(host), port = port)
     client.initCTX(certFile)
+    client.socket.connect(address = $(host), port = port)
     echo "[+] server joined... at": host
 
     while true:

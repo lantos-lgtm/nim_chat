@@ -1,6 +1,6 @@
 import 
     strutils, os,
-    threadpool,
+    threadpool, locks,
     net,
     chat_client
 
@@ -10,32 +10,39 @@ type
         host*:IpAddress
         port*: Port
         ctx: SslContext
-        clients: seq[Socket]
+        # clients: seq[Socket]
         counter: uint32
 
+var 
+    clientsLock : Lock
+    clients: seq[Socket]
+    # clientsChannel: Channel[seq[Socket]]
 
 proc initCTX(server: var Server, certFile, keyFile: string) =
     server.ctx = newContext(certFile=certFile, keyFile=keyFile)
     server.ctx.wrapSocket(server.socket)
 
-proc handleClient(server: Server, client: Socket) {.thread.} =
+proc handleClient(client: Socket) {.thread.} =
     while true:
         var line = client.recvLine()
         if line.len == 0: 
             # client disconnected
             discard 
             line = "client disconnected"
-        for client in server.clients:
-            client.send(line  &  "\r\L")
-
+ 
+        withLock(clientsLock):
+            {.gcsafe.}:
+            # echo clientsChannel.recv().len
+                for client in clients:
+                    client.send(line  &  "\r\L")
+            
 
 proc startServer*(args: seq[string]) {.thread.} =
     echo "[+] starting server..."
     var
-        server: Server
+        server:  Server
         certFile = "cert.pem"
         keyFile = "key.pem"
-
     if args.len > 1:
         server.host = args[1].parseIpAddress()
 
@@ -65,6 +72,8 @@ proc startServer*(args: seq[string]) {.thread.} =
             client: Socket
         server.socket.acceptAddr(client, clientAddr)
         echo "client connected to server from: " & $clientAddr
-        server.ctx.wrapConnectedSocket(client, handshakeAsServer)
-        server.clients.add(client)
-        spawn server.handleClient(client)
+        # server.ctx.wrapConnectedSocket(client, handshakeAsServer)
+        withLock(clientsLock):
+            {.gcsafe.}:
+                clients.add(client)
+        spawn handleClient(client)

@@ -12,7 +12,6 @@ type
     MetaMessage* = object
         client, server: string
         message*: Message
-        counter*: uint32
 
 proc cipherMessage*(msg: var Message, key: Key): uint32 =
     var

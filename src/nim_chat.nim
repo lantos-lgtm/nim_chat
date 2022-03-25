@@ -9,9 +9,12 @@ proc main(args: seq[string]) {.thread.} =
         case args[0]
         of "start":
             spawn startServer(args)
-            spawn startClient(args)
             sync()
             return
+        of "startl":
+            spawn startServer(args)
+            spawn startClient(args)
+            sync()
         of "connect":
             spawn startClient(args)
             sync()
@@ -21,6 +24,7 @@ proc main(args: seq[string]) {.thread.} =
 [+] help
     > command ip port
     > start 0.0.0.0 1234
+    > startl 0.0.0.0 1234
     > connect 0.0.0.0 1234
 [!] WARNING THIS DOES NO NOT CHECK FOR POISENED MESSAGES
     """

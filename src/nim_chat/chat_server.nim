@@ -1,8 +1,7 @@
 import 
     strutils, os,
     threadpool, locks,
-    net,
-    chat_client
+    net
 
 type
     Server* = object
@@ -27,9 +26,9 @@ proc handleClient(client: Socket) {.thread.} =
         var line = client.recvLine()
         if line.len == 0: 
             # client disconnected
-            discard 
             line = "client disconnected"
- 
+            discard 
+            
         withLock(clientsLock):
             {.gcsafe.}:
             # echo clientsChannel.recv().len
@@ -64,7 +63,7 @@ proc startServer*(args: seq[string]) {.thread.} =
         server.socket.close()
 
     server.initCTX(certFile, keyFile)
-    echo "[+] server started... listening at": server.socket.getLocalAddr()
+    echo "[+] server started... listening at ": server.socket.getLocalAddr()
 
     while true:
         var 

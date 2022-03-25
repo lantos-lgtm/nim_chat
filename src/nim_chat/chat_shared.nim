@@ -14,6 +14,8 @@ type
         message*: Message
 
 proc cipherMessage*(msg: var Message, key: Key): uint32 =
+    if msg.message.len == 0:
+        return msg.counter
     var
         m: seq[byte] = @[]
     m.setLen(msg.message.len())

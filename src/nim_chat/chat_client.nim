@@ -51,7 +51,6 @@ proc outGoingThread(client: Client) {.thread.} =
         client.sendMessage(message)
 
 proc startClient*(args: seq[string]) {.thread.} =
-    echo "[+] starting server..."
     var
         client: Client
         host: IpAddress

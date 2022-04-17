@@ -3,11 +3,11 @@
 Simple chat that is written in mostly pure nim
 
 ## Todo
-[ ] add audio will make this non pure
-[ ] add MAC
-[ ] add HDKF - need to make on constantine
-[ ] make async branch no threads?
-[ ] could make some sort of gossip relay??
+- [ ] add audio will make this non pure
+- [ ] add MAC
+- [ ] add HDKF - need to make on constantine
+- [ ] make async branch no threads?
+- [ ] could make some sort of gossip relay??
 
 # starting a server
 ## Docker

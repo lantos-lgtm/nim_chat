@@ -1,7 +1,9 @@
 import 
-    strutils, os,
+    strutils, sequtils, strformat,
+    os,
     threadpool, locks,
-    net
+    net,
+    tables
 
 type
     Server* = object
@@ -14,27 +16,42 @@ type
 
 var 
     clientsLock : Lock
-    clients: seq[Socket]
+    clients: TableRef[string, Socket] = newTable[string, Socket]() 
     # clientsChannel: Channel[seq[Socket]]
 
 proc initCTX(server: var Server, certFile, keyFile: string) =
     server.ctx = newContext(certFile=certFile, keyFile=keyFile)
     server.ctx.wrapSocket(server.socket)
 
-proc handleClient(client: Socket) {.thread.} =
+proc sendMessageToClients(line: string) =
+    withLock(clientsLock):
+            {.gcsafe.}:
+            # echo clientsChannel.recv().len
+                for client in clients.values:
+                    client.send(line  &  "\r\L")
+
+proc handleClient(clientID: string, client: Socket) {.thread.} =
+
     while true:
         var line = client.recvLine()
         if line.len == 0: 
             # client disconnected
-            line = "client disconnected"
-            discard 
+            line = fmt"[-] client ${clientID} disconnected"
+            echo line
+            withLock(clientsLock):
+                {.gcsafe.}:
+                    clients.del(clientId)
+            sendMessageToClients(line)
+            break
+        sendMessageToClients(line)
             
-        withLock(clientsLock):
-            {.gcsafe.}:
-            # echo clientsChannel.recv().len
-                for client in clients:
-                    client.send(line  &  "\r\L")
-            
+proc genClientID(clientID: string, count: int): string =
+    var c = count
+    {.gcsafe.}:
+        echo clients.keys().toSeq()
+        if clients.hasKey(clientID & ":" & $c):
+            return genClientID(clientID, c + 1)
+    return clientID & ":" & $c
 
 proc startServer*(args: seq[string]) {.thread.} =
     echo "[+] starting server..."
@@ -50,8 +67,9 @@ proc startServer*(args: seq[string]) {.thread.} =
 
     if not (keyFile.fileExists() or certFile.fileExists()):
         echo "[-] keyFile or certFile not found"
-        echo "please generate new keyFile or certFile with"
-        echo "openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout " & keyFile & " -out " & certFile
+        echo "[!] please generate new keyFile or certFile with"
+        echo "[!] openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout " & keyFile & " -out " & certFile
+        echo "[!] and bind them to docker container if needed"
         quit()
 
     server.socket = newSocket()
@@ -69,10 +87,15 @@ proc startServer*(args: seq[string]) {.thread.} =
         var 
             clientAddr: string
             client: Socket
-        server.socket.acceptAddr(client, clientAddr)
-        echo "client connected to server from: " & $clientAddr
-        # server.ctx.wrapConnectedSocket(client, handshakeAsServer)
-        withLock(clientsLock):
-            {.gcsafe.}:
-                clients.add(client)
-        spawn handleClient(client)
+        try:
+            server.socket.acceptAddr(client, clientAddr)
+
+            clientAddr = genClientID(clientAddr, 0)
+            echo "[+] client connected to server from: " & $clientAddr
+            # server.ctx.wrapConnectedSocket(client, handshakeAsServer)
+            withLock(clientsLock):
+                {.gcsafe.}:
+                    clients[clientAddr] = client
+            spawn handleClient(clientAddr, client)
+        except:
+            echo "[-] ", getCurrentExceptionMsg()

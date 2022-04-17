@@ -27,11 +27,14 @@ proc initCTX(client: var Client, certFile: string) =
     discard SSL_CTX_load_verify_locations(client.ctx.context, certFile , $client.host)
     client.ctx.wrapSocket(client.socket)
 
-proc handleIncomingPacket(client: Client) =
+proc handleIncomingPacket(client: Client): bool =
     var line = client.socket.recvLine()
+    if line.len == 0:
+       return false
     var meta_message = line.passMetaMessage()
     counter = meta_message.message.cipherMessage(client.key)
     echo meta_message.message.message
+    return true
 
 proc sendMessage(client: Client, msg: string) =
     var meta_message: MetaMessage
@@ -43,7 +46,9 @@ proc sendMessage(client: Client, msg: string) =
 
 proc incomingThread(client: Client) {.thread.} =
     while true:
-        client.handleIncomingPacket()
+        if not client.handleIncomingPacket():
+            echo "[-] lost connection to server"
+            break
 
 proc outGoingThread(client: Client) {.thread.} =
     while true:
@@ -70,13 +75,13 @@ proc startClient*(args: seq[string]) {.thread.} =
 
     client.initCTX(certFile)
     client.socket.connect(address = $(host), port = port)
-    echo "[+] server joined... at": host
+    echo "[+] server joined... at ": host
 
     while true:
         if key.len * 8 == 32 * 8:
             copyMem(client.key[0].addr, key[0].addr, 32)
             break
-        echo "please enter ", 32 - key.len, " bytes more bytes to make a 256 bit key"
+        echo "[!] please enter ", 32 - key.len, " bytes more bytes to make a 256 bit key"
         key = stdin.readLine()
 
     discard urandom(client.nonce)

@@ -27,11 +27,11 @@ proc passMetaMessage*(msg: string): MetaMessage =
     try:
         result = msg.fromJson(MetaMessage)
     except:
-        echo "[-]failed to pass packet"
+        echo "[-] failed to pass packet"
         echo msg
 
 proc buildMessage*(msg: MetaMessage): string =
     try:
         result = msg.toJson()
     except:
-        echo "[-]failed to build message"
+        echo "[-] failed to build message"

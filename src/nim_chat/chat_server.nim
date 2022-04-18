@@ -1,49 +1,40 @@
 import 
     strutils, sequtils, strformat,
+    asyncdispatch, asyncnet, net,
     os,
-    threadpool, locks,
-    net,
     tables
 
 type
     Server* = object
-        socket:Socket 
-        host*:IpAddress
+        socket: AsyncSocket 
+        host*: IpAddress
         port*: Port
         ctx: SslContext
-        # clients: seq[Socket]
+        # clients: seq[AsyncSocket]
         counter: uint32
 
 var 
-    clientsLock : Lock
-    clients: TableRef[string, Socket] = newTable[string, Socket]() 
-    # clientsChannel: Channel[seq[Socket]]
+    clients: TableRef[string, AsyncSocket] = newTable[string, AsyncSocket]() 
 
 proc initCTX(server: var Server, certFile, keyFile: string) =
     server.ctx = newContext(certFile=certFile, keyFile=keyFile)
     server.ctx.wrapSocket(server.socket)
 
-proc sendMessageToClients(line: string) =
-    withLock(clientsLock):
-            {.gcsafe.}:
-            # echo clientsChannel.recv().len
-                for client in clients.values:
-                    client.send(line  &  "\r\L")
+proc sendMessageToClients(line: string) {.async.}=
+    for client in clients.values:
+        await client.send(line  &  "\r\L")
 
-proc handleClient(clientID: string, client: Socket) {.thread.} =
-
+proc handleClient(clientID: string, client: AsyncSocket) {.async.} =
     while true:
-        var line = client.recvLine()
+        var line = await client.recvLine()
         if line.len == 0: 
             # client disconnected
             line = fmt"[-] client ${clientID} disconnected"
             echo line
-            withLock(clientsLock):
-                {.gcsafe.}:
-                    clients.del(clientId)
-            sendMessageToClients(line)
+            clients.del(clientId)
+            await sendMessageToClients(line)
             break
-        sendMessageToClients(line)
+        await sendMessageToClients(line)
             
 proc genClientID(clientID: string, count: int): string =
     var c = count
@@ -53,7 +44,7 @@ proc genClientID(clientID: string, count: int): string =
             return genClientID(clientID, c + 1)
     return clientID & ":" & $c
 
-proc startServer*(args: seq[string]) {.thread.} =
+proc startServer*(args: seq[string]) {.async.} =
     echo "[+] starting server..."
     var
         server:  Server
@@ -72,7 +63,7 @@ proc startServer*(args: seq[string]) {.thread.} =
         echo "[!] and bind them to docker container if needed"
         quit()
 
-    server.socket = newSocket()
+    server.socket = newAsyncSocket()
     server.socket.setSockOpt(OptReuseAddr, true)
     server.socket.setSockOpt(OptReusePort, true)
     server.socket.bindAddr(server.port, $(server.host))
@@ -83,19 +74,17 @@ proc startServer*(args: seq[string]) {.thread.} =
     server.initCTX(certFile, keyFile)
     echo "[+] server started... listening at ": server.socket.getLocalAddr()
 
+    # var fts: seq[Future[void]] = []
     while true:
         var 
             clientAddr: string
-            client: Socket
+            client: AsyncSocket
         try:
-            server.socket.acceptAddr(client, clientAddr)
-
+            (clientAddr, client) = await server.socket.acceptAddr()
             clientAddr = genClientID(clientAddr, 0)
             echo "[+] client connected to server from: " & $clientAddr
-            # server.ctx.wrapConnectedSocket(client, handshakeAsServer)
-            withLock(clientsLock):
-                {.gcsafe.}:
-                    clients[clientAddr] = client
-            spawn handleClient(clientAddr, client)
+            server.ctx.wrapConnectedSocket(client, handshakeAsServer)
+            clients[clientAddr] = client
+            asyncCheck handleClient(clientAddr, client)
         except:
             echo "[-] ", getCurrentExceptionMsg()

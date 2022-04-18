@@ -1,24 +1,19 @@
 
 import 
-    os, threadpool, 
+    os,
+    asyncdispatch,
     nim_chat/[chat_client, chat_server]
 
-proc main(args: seq[string]) {.thread.} =
+proc main(args: seq[string]) {.async.} =
 
     if args.len > 1:
         case args[0]
         of "start":
-            spawn startServer(args)
-            sync()
-            return
+            await startServer(args)
         of "startl":
-            spawn startServer(args)
-            spawn startClient(args)
-            sync()
+            await all([startServer(args), startClient(args)])
         of "connect":
-            spawn startClient(args)
-            sync()
-            return
+            await startClient(args)
 
     echo """ 
 [+] help
@@ -29,4 +24,4 @@ proc main(args: seq[string]) {.thread.} =
 [!] WARNING THIS DOES NO NOT CHECK FOR POISENED MESSAGES
     """
 
-main(commandLineParams())
+waitFor main(commandLineParams())

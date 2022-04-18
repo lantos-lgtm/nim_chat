@@ -51,11 +51,13 @@ proc incoming(client: Client) {.async.} =
             break
 
 proc outGoing(client: Client) {.async.} =
-    var message = spawn stdin.readLine()
+    # this is broken
+    # https://github.com/nim-lang/Nim/issues/11564
+    var messageFV = spawn stdin.readLine()
     while true:
-        if message.isReady():
-            message = spawn stdin.readLine()
-            await client.sendMessage(^message)
+        if messageFV.isReady():
+            await client.sendMessage(^messageFV)
+            messageFV = spawn stdin.readLine()
         asyncdispatch.poll()
 
 proc startClient*(args: seq[string]) {.async.} =

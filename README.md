@@ -1,6 +1,9 @@
 # nim_chat
 
 Simple chat that is written in mostly pure nim
+- branchs:
+  - main - server + client threads
+  - async - server async, client threads
 
 ## Todo
 - [ ] add audio will make this non pure
